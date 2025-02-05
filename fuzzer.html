@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html data-theme="light">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>XSS Fuzzer</title>
+
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+
+	<script type="text/javascript">
+		document.addEventListener('DOMContentLoaded', event => {
+			const elements = {
+				tableBody: document.querySelector('tbody'),
+				fireButton: document.querySelector('button'),
+				fuzzInput: document.querySelector('.fuzz-value'),
+				fuzzPercentage: document.querySelector('.percentage')
+			}
+
+			function toUTF8EscapeSequence(char) {
+				const codePoint = char.codePointAt(0);
+				return '\\x' + codePoint.toString(16).padStart(2, '0').toUpperCase();
+			}
+
+			async function cleanup() {
+				return new Promise(async resolve => {
+					setTimeout(() => {
+						const rows = elements.tableBody.querySelectorAll('tr');
+
+						rows.forEach(row => {
+							if (row.id != 'hit') {
+								row.remove();
+							}
+						});
+
+						resolve()
+					}, 10)
+				})
+			}
+
+			elements.fireButton.addEventListener('click', async event => {
+				elements.fireButton.disabled = true
+				elements.tableBody.innerHTML = "" 
+
+				const payload = "this.parentElement.parentElement.id = 'hit'"
+				const html = `
+					<th scope="row">"{unicode}"</th>
+					<td>{utf}</td>
+					<td>${elements.fuzzInput.value}</td>
+				`
+
+				for (let i = 0; i <= 0x10FFFF; i++) {
+					const percentage = ((i / 0x10FFFF) * 100).toFixed(2);
+
+					elements.fuzzPercentage.innerText = `${percentage}%`
+
+					elements.tableBody.innerHTML += html
+						.replaceAll('{unicode}', String.fromCodePoint(i))
+						.replaceAll('{payload}', payload)
+						.replaceAll('{utf}', toUTF8EscapeSequence(String.fromCodePoint(i)))
+
+					if(i % 10 === 0) {
+						await cleanup()
+					}
+				}
+			})
+		})
+	</script>
+</head>
+<body>
+	<div class="container">
+		<section>
+			<h1>XSS Research Fuzzer</h1>
+		</section>
+
+		<hr>
+
+		<section>
+			<h3>Configuration</h3>
+			<!-- To be implemented?
+			<label>
+				Timeout
+				<input
+					type="range"
+					max="5000"
+					min="0"
+					value="100"
+					class="timeout-value"/>
+			</label>
+			--> 
+
+			<label>
+				Test String
+				<input
+					type="text"
+					value='<img{unicode}src="x" onerror="{payload}">'
+					placeholder='<img{unicode}src="x" onerror="{payload}">'
+					class="fuzz-value"/>
+			</label>
+
+			<button style="width: 100%">Fuzz the planet!</button>
+		</section>
+
+		<hr>
+
+		<section>
+			<h3>Findings</h3>
+			<p class="percentage"></p>
+			<table>
+				<thead>
+					<tr>
+						<th scope="col">Unicode</th>
+						<th scope="col">UTF-8</th>
+						<th scope="col">Render</th>
+					</tr>
+				</thead>
+				<tbody>
+				</tbody>
+			</table>
+		</section>
+	</div>
+</body>
+</html>
